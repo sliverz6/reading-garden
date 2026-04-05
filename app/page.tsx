@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Pencil } from "lucide-react";
 import ContributionGraph from "@/components/ContributionGraph";
 import RecordWriteModal from "@/components/RecordWriteModal";
+import Toast, { type ToastData } from "@/components/Toast";
 import type { RecordsData, ReadingRecord, RecordEntry } from "@/lib/types";
 import { toLocalDateStr } from "@/lib/types";
 
@@ -26,16 +27,27 @@ function HomeContent() {
   const [records, setRecords] = useState<RecordsData>({});
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState<ModalMode | null>(null);
+  const [toast, setToast]       = useState<ToastData | null>(null);
+  const [deletingIdx, setDeletingIdx] = useState<number | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedDate = searchParams.get("date");
 
-  const fetchRecords = useCallback(async () => {
-    const res  = await fetch("/api/records");
-    const data: RecordsData = await res.json();
-    setRecords(data);
-    setLoading(false);
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
   }, []);
+
+  const fetchRecords = useCallback(async () => {
+    try {
+      const res  = await fetch("/api/records");
+      const data: RecordsData = await res.json();
+      setRecords(data);
+    } catch {
+      showToast("기록을 불러오지 못했습니다.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
@@ -56,6 +68,7 @@ function HomeContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entries }),
     });
+    if (!res.ok) throw new Error("server error");
     const updated: ReadingRecord = await res.json();
     setRecords((prev) => {
       if (entries.length === 0) {
@@ -70,28 +83,44 @@ function HomeContent() {
   const handleDelete = async (date: string, idx: number) => {
     const record = records[date];
     if (!record) return;
-    await applyEntries(date, record.entries.filter((_, i) => i !== idx));
+    setDeletingIdx(idx);
+    try {
+      await applyEntries(date, record.entries.filter((_, i) => i !== idx));
+      showToast("삭제했습니다.", "delete");
+    } catch {
+      showToast("삭제에 실패했습니다.", "error");
+    } finally {
+      setDeletingIdx(null);
+    }
   };
 
   /** 모달 onSave 핸들러 — 추가/수정 분기 */
   const handleModalSave = async (content: string) => {
     if (!selectedDate) return;
-    if (modal?.type === "edit") {
-      const record = records[selectedDate];
-      if (!record) return;
-      const { idx } = modal;
-      const newEntries = record.entries.map((e, i) =>
-        i === idx ? { ...e, content } : e
-      );
-      await applyEntries(selectedDate, newEntries);
-    } else {
-      const res = await fetch(`/api/records/${selectedDate}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      const record: ReadingRecord = await res.json();
-      setRecords((prev) => ({ ...prev, [record.date]: record }));
+    try {
+      if (modal?.type === "edit") {
+        const record = records[selectedDate];
+        if (!record) return;
+        const { idx } = modal;
+        const newEntries = record.entries.map((e, i) =>
+          i === idx ? { ...e, content } : e
+        );
+        await applyEntries(selectedDate, newEntries);
+        showToast("수정했습니다.", "success");
+      } else {
+        const res = await fetch(`/api/records/${selectedDate}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        });
+        if (!res.ok) throw new Error("server error");
+        const record: ReadingRecord = await res.json();
+        setRecords((prev) => ({ ...prev, [record.date]: record }));
+        showToast("저장했습니다.", "success");
+      }
+    } catch (err) {
+      showToast("저장에 실패했습니다.", "error");
+      throw err; // 모달이 닫히지 않도록 re-throw
     }
   };
 
@@ -189,10 +218,11 @@ function HomeContent() {
                         </button>
                         <button
                           onClick={() => handleDelete(selectedDate, i)}
-                          style={{ fontSize: 11, color: "var(--muted)", cursor: "pointer" }}
-                          className="hover:text-red-400 transition-colors"
+                          disabled={deletingIdx === i}
+                          style={{ fontSize: 11, color: "#c0392b", cursor: deletingIdx === i ? "not-allowed" : "pointer", opacity: deletingIdx === i ? 0.45 : 1 }}
+                          className="transition-colors"
                         >
-                          삭제
+                          {deletingIdx === i ? "삭제 중..." : "삭제"}
                         </button>
                       </div>
                     </div>
@@ -218,6 +248,9 @@ function HomeContent() {
           onSave={handleModalSave}
         />
       )}
+
+      {/* 토스트 알림 */}
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </main>
   );
 }
