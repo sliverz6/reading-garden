@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --surface: #161b22;
+  --border: #30363d;
+  --muted: #8b949e;
+  --accent: #238636;
+
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+    Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+}
+
+textarea:focus {
+  outline: none;
+}
+
+button:not(:disabled) {
+  transition: filter 0.15s ease;
+}
+button:not(:disabled):hover {
+  filter: brightness(1.18);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUpOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(12px); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-overlay {
+  animation: fadeIn 0.2s ease forwards;
+}
+.modal-overlay.closing {
+  animation: fadeOut 0.2s ease forwards;
+}
+.modal-content {
+  animation: slideUp 0.2s ease forwards;
+}
+.modal-content.closing {
+  animation: slideUpOut 0.2s ease forwards;
+}
