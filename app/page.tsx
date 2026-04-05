@@ -33,7 +33,7 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const selectedDate = searchParams.get("date");
 
-  const showToast = useCallback((message: string, type: "success" | "error") => {
+  const showToast = useCallback((message: string, type: "success" | "delete" | "error") => {
     setToast({ message, type });
   }, []);
 
