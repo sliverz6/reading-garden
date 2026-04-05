@@ -1,7 +1,21 @@
 export interface RecordEntry {
   content: string;
   createdAt: string;
+  bookId?: string;
 }
+
+export type BookStatus = "reading" | "finished" | "paused";
+
+export interface Book {
+  id: string;
+  title: string;
+  author: string;
+  status: BookStatus;
+  createdAt: string;
+  finishedAt?: string;
+}
+
+export type BooksData = Record<string, Book>;
 
 export interface ReadingRecord {
   date: string;
@@ -21,11 +35,11 @@ export function toLocalDateStr(d: Date = new Date()): string {
 
 /** 해당 날 전체 기록 길이 기반 색상 레벨 (0~4) */
 export function getGrassLevel(record: ReadingRecord | undefined): number {
-  if (!record || !record.entries?.length) return 0;
-  const total = record.entries.reduce((s, e) => s + e.content.trim().length, 0);
-  if (total === 0) return 0;
-  if (total < 50) return 1;
-  if (total < 150) return 2;
-  if (total < 300) return 3;
-  return 4;
+  const count = record?.entries?.length ?? 0;
+  if (count === 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 4) return 2;
+  if (count <= 6) return 3;
+  if (count <= 8) return 4;
+  return 5;
 }

@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Pencil } from "lucide-react";
+
 import ContributionGraph from "@/components/ContributionGraph";
 import RecordWriteModal from "@/components/RecordWriteModal";
 import Toast, { type ToastData } from "@/components/Toast";
-import type { RecordsData, ReadingRecord, RecordEntry } from "@/lib/types";
+import type { RecordsData, ReadingRecord, RecordEntry, BooksData, Book } from "@/lib/types";
 import { toLocalDateStr } from "@/lib/types";
 
 function formatDisplayDate(dateStr: string) {
@@ -21,10 +23,11 @@ function formatTime(iso: string) {
 
 type ModalMode =
   | { type: "add" }
-  | { type: "edit"; idx: number; initialContent: string };
+  | { type: "edit"; idx: number; initialContent: string; initialBookId?: string };
 
 function HomeContent() {
   const [records, setRecords] = useState<RecordsData>({});
+  const [books, setBooks]     = useState<BooksData>({});
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState<ModalMode | null>(null);
   const [toast, setToast]       = useState<ToastData | null>(null);
@@ -50,7 +53,20 @@ function HomeContent() {
     }
   }, [showToast]);
 
-  useEffect(() => { fetchRecords(); }, [fetchRecords]);
+  const fetchBooks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/books");
+      const data: BooksData = await res.json();
+      setBooks(data);
+    } catch {
+      // 책 목록 로딩 실패는 조용히 처리
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRecords();
+    fetchBooks();
+  }, [fetchRecords, fetchBooks]);
 
   // 날짜가 바뀌면 모달·확인 상태 초기화
   useEffect(() => { setModal(null); setConfirmIdx(null); }, [selectedDate]);
@@ -96,8 +112,20 @@ function HomeContent() {
     }
   };
 
+  const handleBookCreate = async (title: string, author: string): Promise<Book> => {
+    const res = await fetch("/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, author }),
+    });
+    if (!res.ok) throw new Error("server error");
+    const book: Book = await res.json();
+    setBooks((prev) => ({ ...prev, [book.id]: book }));
+    return book;
+  };
+
   /** 모달 onSave 핸들러 — 추가/수정 분기 */
-  const handleModalSave = async (content: string) => {
+  const handleModalSave = async (content: string, bookId?: string) => {
     if (!selectedDate) return;
     try {
       if (modal?.type === "edit") {
@@ -105,7 +133,7 @@ function HomeContent() {
         if (!record) return;
         const { idx } = modal;
         const newEntries = record.entries.map((e, i) =>
-          i === idx ? { ...e, content } : e
+          i === idx ? { ...e, content, ...(bookId !== undefined ? { bookId } : { bookId: undefined }) } : e
         );
         await applyEntries(selectedDate, newEntries);
         showToast("수정했습니다.", "success");
@@ -113,7 +141,7 @@ function HomeContent() {
         const res = await fetch(`/api/records/${selectedDate}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, ...(bookId ? { bookId } : {}) }),
         });
         if (!res.ok) throw new Error("server error");
         const record: ReadingRecord = await res.json();
@@ -122,7 +150,7 @@ function HomeContent() {
       }
     } catch (err) {
       showToast("저장에 실패했습니다.", "error");
-      throw err; // 모달이 닫히지 않도록 re-throw
+      throw err;
     }
   };
 
@@ -145,19 +173,9 @@ function HomeContent() {
     <main className="min-h-screen py-12 px-4">
       <div className="max-w-5xl mx-auto">
 
-        {/* 헤더 */}
-        <div className="mb-10">
-          <h1 className="text-2xl font-semibold mb-1" style={{ color: "var(--foreground)" }}>
-            Reading Garden
-          </h1>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
-            독서 기록을 잔디밭처럼 쌓아보세요
-          </p>
-        </div>
-
         {/* 통계 */}
         <div className="flex gap-6 mb-8">
-          {[{ label: "총 기록일", value: totalDays }, { label: "연속 기록", value: `${streak}일` }].map(({ label, value }) => (
+          {[{ label: "총 기록일", value: `${totalDays}일` }, { label: "연속 기록", value: `${streak}일` }].map(({ label, value }) => (
             <div key={label}>
               <p className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>{value}</p>
               <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>{label}</p>
@@ -197,83 +215,103 @@ function HomeContent() {
 
             {selectedRecord?.entries?.length ? (
               <div>
-                {selectedRecord.entries.map((entry, i) => (
-                  <div
-                    key={entry.createdAt}
-                    style={{
-                      borderLeft: "2px solid var(--accent)",
-                      paddingLeft: 12,
-                      marginBottom: i < selectedRecord.entries.length - 1 ? 20 : 0,
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <p style={{ fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1 }}>
-                        {i + 1}번째 기록 · {formatTime(entry.createdAt)}
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setModal({ type: "edit", idx: i, initialContent: entry.content })}
-                          style={{ fontSize: 11, color: "var(--muted)", cursor: "pointer", lineHeight: 1 }}
-                          className="hover:text-white transition-colors"
-                        >
-                          수정
-                        </button>
-                        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                {selectedRecord.entries.map((entry, i) => {
+                  const entryBook = entry.bookId ? books[entry.bookId] : null;
+                  return (
+                    <div
+                      key={entry.createdAt}
+                      style={{
+                        borderLeft: "2px solid var(--accent)",
+                        paddingLeft: 12,
+                        marginBottom: i < selectedRecord.entries.length - 1 ? 20 : 0,
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p style={{ fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1 }}>
+                          {i + 1}번째 기록 · {formatTime(entry.createdAt)}
+                        </p>
+                        <div className="flex items-center gap-3">
                           <button
-                            onClick={() => setConfirmIdx(confirmIdx === i ? null : i)}
-                            disabled={deletingIdx === i}
-                            style={{ fontSize: 11, color: "#c0392b", cursor: deletingIdx === i ? "not-allowed" : "pointer", opacity: deletingIdx === i ? 0.45 : 1, lineHeight: 1 }}
+                            onClick={() => setModal({ type: "edit", idx: i, initialContent: entry.content, initialBookId: entry.bookId })}
+                            style={{ fontSize: 11, color: "var(--muted)", cursor: "pointer", lineHeight: 1 }}
+                            className="hover:text-white transition-colors"
                           >
-                            {deletingIdx === i ? "삭제 중..." : "삭제"}
+                            수정
                           </button>
-                          {confirmIdx === i && (
-                            <div
-                              className="confirm-popup"
-                              style={{
-                                position: "absolute",
-                                top: "50%",
-                                left: "calc(100% + 8px)",
-                                transform: "translateY(-50%)",
-                                backgroundColor: "var(--background)",
-                                border: "1px solid var(--border)",
-                                borderRadius: 8,
-                                padding: "10px 12px",
-                                boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-                                whiteSpace: "nowrap",
-                                zIndex: 50,
-                              }}
+                          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                            <button
+                              onClick={() => setConfirmIdx(confirmIdx === i ? null : i)}
+                              disabled={deletingIdx === i}
+                              style={{ fontSize: 11, color: "#c0392b", cursor: deletingIdx === i ? "not-allowed" : "pointer", opacity: deletingIdx === i ? 0.45 : 1, lineHeight: 1 }}
                             >
-                              <p style={{ fontSize: 12, color: "var(--foreground)", marginBottom: 8 }}>정말 삭제할까요?</p>
-                              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                                <button
-                                  onClick={() => setConfirmIdx(null)}
-                                  style={{
-                                    fontSize: 11, padding: "3px 10px", borderRadius: 5, cursor: "pointer",
-                                    backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)",
-                                  }}
-                                >
-                                  취소
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(selectedDate, i)}
-                                  style={{
-                                    fontSize: 11, padding: "3px 10px", borderRadius: 5, cursor: "pointer",
-                                    backgroundColor: "#c0392b", border: "none", color: "#fff",
-                                  }}
-                                >
-                                  삭제
-                                </button>
+                              {deletingIdx === i ? "삭제 중..." : "삭제"}
+                            </button>
+                            {confirmIdx === i && (
+                              <div
+                                className="confirm-popup"
+                                style={{
+                                  position: "absolute",
+                                  top: "50%",
+                                  left: "calc(100% + 8px)",
+                                  transform: "translateY(-50%)",
+                                  backgroundColor: "var(--background)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 8,
+                                  padding: "10px 12px",
+                                  boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+                                  whiteSpace: "nowrap",
+                                  zIndex: 50,
+                                }}
+                              >
+                                <p style={{ fontSize: 12, color: "var(--foreground)", marginBottom: 8 }}>정말 삭제할까요?</p>
+                                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                                  <button
+                                    onClick={() => setConfirmIdx(null)}
+                                    style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, cursor: "pointer", backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}
+                                  >
+                                    취소
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(selectedDate, i)}
+                                    style={{ fontSize: 11, padding: "3px 10px", borderRadius: 5, cursor: "pointer", backgroundColor: "#c0392b", border: "none", color: "#fff" }}
+                                  >
+                                    삭제
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
+
+                      {/* 책 배지 */}
+                      {entry.bookId && (
+                        <div style={{ marginBottom: 6 }}>
+                          {entryBook ? (
+                            <Link
+                              href={`/shelf?book=${entry.bookId}`}
+                              style={{
+                                display: "inline-flex", alignItems: "center", gap: 4,
+                                fontSize: 11, color: "var(--accent)", textDecoration: "none",
+                                padding: "2px 7px", borderRadius: 4,
+                                backgroundColor: "rgba(35,134,54,0.15)",
+                                border: "1px solid rgba(35,134,54,0.3)",
+                              }}
+                            >
+                              📚 {entryBook.title}{entryBook.author ? ` · ${entryBook.author}` : ""}
+                            </Link>
+                          ) : (
+                            <span style={{ fontSize: 11, color: "var(--muted)" }}>삭제된 책</span>
+                          )}
+                        </div>
+                      )}
+
+                      <p className="whitespace-pre-wrap leading-relaxed" style={{ fontSize: 14, color: "var(--foreground)" }}>
+                        {entry.content}
+                      </p>
                     </div>
-                    <p className="whitespace-pre-wrap leading-relaxed" style={{ fontSize: 14, color: "var(--foreground)" }}>
-                      {entry.content}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p style={{ color: "var(--muted)", fontSize: 14 }}>이 날의 기록이 없습니다.</p>
@@ -287,8 +325,11 @@ function HomeContent() {
         <RecordWriteModal
           date={selectedDate}
           initialContent={modal.type === "edit" ? modal.initialContent : ""}
+          initialBookId={modal.type === "edit" ? modal.initialBookId : undefined}
+          books={books}
           onClose={() => setModal(null)}
           onSave={handleModalSave}
+          onBookCreate={handleBookCreate}
         />
       )}
 

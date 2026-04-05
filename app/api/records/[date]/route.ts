@@ -15,11 +15,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function POST(req: NextRequest, { params }: Params) {
   const { date } = await params;
-  const { content } = await req.json() as { content: string };
+  const { content, bookId } = await req.json() as { content: string; bookId?: string };
   if (typeof content !== "string") {
     return NextResponse.json({ error: "content is required" }, { status: 400 });
   }
-  const record = await saveRecord(date, content);
+  const record = await saveRecord(date, content, bookId);
   return NextResponse.json(record);
 }
 

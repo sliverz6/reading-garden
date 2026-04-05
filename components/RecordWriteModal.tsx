@@ -2,12 +2,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import BookSelectDropdown from "./BookSelectDropdown";
+import type { Book, BooksData } from "@/lib/types";
 
 interface Props {
   date: string;
-  initialContent?: string;   // 수정 모드일 때 기존 내용
+  initialContent?: string;
+  initialBookId?: string;
+  books: BooksData;
   onClose: () => void;
-  onSave: (content: string) => Promise<void>;  // 저장 로직은 호출자가 담당
+  onSave: (content: string, bookId?: string) => Promise<void>;
+  onBookCreate: (title: string, author: string) => Promise<Book>;
 }
 
 function formatDisplayDate(dateStr: string) {
@@ -16,9 +21,10 @@ function formatDisplayDate(dateStr: string) {
   });
 }
 
-export default function RecordWriteModal({ date, initialContent = "", onClose, onSave }: Props) {
-  const [content, setContent] = useState(initialContent);
-  const [saving, setSaving]   = useState(false);
+export default function RecordWriteModal({ date, initialContent = "", initialBookId, books, onClose, onSave, onBookCreate }: Props) {
+  const [content, setContent]     = useState(initialContent);
+  const [bookId, setBookId]       = useState<string | undefined>(initialBookId);
+  const [saving, setSaving]       = useState(false);
   const [closing, setClosing] = useState(false);
   const textareaRef           = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -48,7 +54,7 @@ export default function RecordWriteModal({ date, initialContent = "", onClose, o
     if (!content.trim()) return;
     setSaving(true);
     try {
-      await onSave(content);
+      await onSave(content, bookId);
       handleClose();
     } finally {
       setSaving(false);
@@ -104,6 +110,16 @@ export default function RecordWriteModal({ date, initialContent = "", onClose, o
           >
             <X size={18} strokeWidth={1.8} />
           </button>
+        </div>
+
+        {/* 책 선택 */}
+        <div className="mb-4">
+          <BookSelectDropdown
+            books={books}
+            selectedBookId={bookId}
+            onChange={setBookId}
+            onBookCreate={onBookCreate}
+          />
         </div>
 
         {/* 입력 */}

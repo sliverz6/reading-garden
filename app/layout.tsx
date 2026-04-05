@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
   title: "Reading Garden",
@@ -13,7 +14,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <div style={{ display: "flex", alignItems: "flex-start" }}>
+          <Sidebar />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {children}
+          </div>
+        </div>
+      </body>
     </html>
   );
 }

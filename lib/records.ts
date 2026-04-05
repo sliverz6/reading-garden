@@ -22,9 +22,9 @@ export async function getRecord(date: string): Promise<ReadingRecord | null> {
   return kv.get<ReadingRecord>(key(date));
 }
 
-export async function saveRecord(date: string, content: string): Promise<ReadingRecord> {
+export async function saveRecord(date: string, content: string, bookId?: string): Promise<ReadingRecord> {
   const existing = await getRecord(date);
-  const newEntry: RecordEntry = { content, createdAt: new Date().toISOString() };
+  const newEntry: RecordEntry = { content, createdAt: new Date().toISOString(), ...(bookId ? { bookId } : {}) };
   const record: ReadingRecord = {
     date,
     entries: existing ? [...existing.entries, newEntry] : [newEntry],

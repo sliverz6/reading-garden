@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import type { RecordsData } from "@/lib/types";
 import { getGrassLevel, toLocalDateStr } from "@/lib/types";
 
@@ -10,17 +10,16 @@ interface Props {
   onDateClick: (date: string) => void;
 }
 
-const NUM_WEEKS = 52;
+const MAX_WEEKS = 52;
 const CELL = 11;
 const GAP = 2;
 const STEP = CELL + GAP;
 const DAY_LABEL_W = 26;
 const MONTH_LABEL_H = 15;
 
-const SVG_W = DAY_LABEL_W + NUM_WEEKS * STEP - GAP;
 const SVG_H = MONTH_LABEL_H + 7 * STEP - GAP;
 
-const GRASS_COLORS = ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353"];
+const GRASS_COLORS = ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353", "#56e66a"];
 const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
 const DAY_LABELS: (string | null)[] = [null, "월", null, "수", null, "금", null];
 
@@ -31,13 +30,30 @@ function formatTooltip(dateStr: string): { line1: string; line2: string } {
   return { line1, line2 };
 }
 
-// 셀 상태별 테두리
-const STROKE_GRID    = "#21262d"; // 기본 그리드 선
-const STROKE_TODAY   = "#58a6ff"; // 오늘
-const STROKE_HOVER   = "rgba(255,255,255,0.65)"; // 호버
-const STROKE_SELECTED = "#ffffff"; // 선택됨
+const STROKE_GRID     = "#21262d";
+const STROKE_TODAY    = "#58a6ff";
+const STROKE_HOVER    = "rgba(255,255,255,0.65)";
+const STROKE_SELECTED = "#ffffff";
 
 export default function ContributionGraph({ records, selectedDate, onDateClick }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [numWeeks, setNumWeeks] = useState(MAX_WEEKS);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const calc = () => {
+      const w = el.clientWidth;
+      const available = w - DAY_LABEL_W + GAP;
+      const weeks = Math.max(4, Math.min(MAX_WEEKS, Math.floor(available / STEP)));
+      setNumWeeks(weeks);
+    };
+    calc();
+    const ro = new ResizeObserver(calc);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const { weeks, monthLabels } = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -46,12 +62,12 @@ export default function ContributionGraph({ records, selectedDate, onDateClick }
     thisSunday.setDate(today.getDate() - today.getDay());
 
     const startSunday = new Date(thisSunday);
-    startSunday.setDate(thisSunday.getDate() - 51 * 7);
+    startSunday.setDate(thisSunday.getDate() - (numWeeks - 1) * 7);
 
     const weeks: (string | null)[][] = [];
     const cur = new Date(startSunday);
 
-    for (let w = 0; w < NUM_WEEKS; w++) {
+    for (let w = 0; w < numWeeks; w++) {
       const week: (string | null)[] = [];
       for (let d = 0; d < 7; d++) {
         week.push(cur > today ? null : toLocalDateStr(new Date(cur)));
@@ -74,7 +90,9 @@ export default function ContributionGraph({ records, selectedDate, onDateClick }
     if (monthLabels.length > 12) monthLabels.shift();
 
     return { weeks, monthLabels };
-  }, []);
+  }, [numWeeks]);
+
+  const SVG_W = DAY_LABEL_W + numWeeks * STEP - GAP;
 
   const todayStr = toLocalDateStr();
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
@@ -84,6 +102,7 @@ export default function ContributionGraph({ records, selectedDate, onDateClick }
 
   return (
     <div
+      ref={containerRef}
       style={{ width: "100%", position: "relative" }}
       onMouseMove={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -108,7 +127,9 @@ export default function ContributionGraph({ records, selectedDate, onDateClick }
           }}
         >
           <p style={{ fontSize: 12, color: "var(--foreground)", margin: 0 }}>{tooltip.line1}</p>
-          <p style={{ fontSize: 11, color: "var(--muted)", margin: 0 }}>{tooltip.line2}</p>
+          <p style={{ fontSize: 11, color: "var(--muted)", margin: 0 }}>
+            {tooltip.line2} · {records[hoveredDate!]?.entries?.length ?? 0}개
+          </p>
         </div>
       )}
       <svg
@@ -151,7 +172,6 @@ export default function ContributionGraph({ records, selectedDate, onDateClick }
             const x = DAY_LABEL_W + wi * STEP;
             const y = MONTH_LABEL_H + di * STEP;
 
-            // 미래 날짜 — 그리드 자리만 표시
             if (!date) {
               return (
                 <rect
@@ -177,11 +197,7 @@ export default function ContributionGraph({ records, selectedDate, onDateClick }
               isToday    ? STROKE_TODAY :
               STROKE_GRID;
 
-            const strokeWidth =
-              isSelected ? 1.5 :
-              isHovered  ? 1.5 :
-              isToday    ? 1.5 :
-              0.5;
+            const strokeWidth = (isSelected || isHovered || isToday) ? 1.5 : 0.5;
 
             return (
               <rect
@@ -214,14 +230,14 @@ export default function ContributionGraph({ records, selectedDate, onDateClick }
           fontSize: 11,
         }}
       >
-        <span>Less</span>
-        {GRASS_COLORS.map((color, i) => (
+        <span>1</span>
+        {GRASS_COLORS.slice(1).map((color, i) => (
           <div
             key={i}
             style={{ width: CELL, height: CELL, borderRadius: 2, backgroundColor: color, flexShrink: 0 }}
           />
         ))}
-        <span>More</span>
+        <span>10</span>
       </div>
     </div>
   );
