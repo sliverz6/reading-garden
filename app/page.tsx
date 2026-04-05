@@ -29,6 +29,7 @@ function HomeContent() {
   const [modal, setModal]     = useState<ModalMode | null>(null);
   const [toast, setToast]       = useState<ToastData | null>(null);
   const [deletingIdx, setDeletingIdx] = useState<number | null>(null);
+  const [confirmIdx, setConfirmIdx]   = useState<number | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedDate = searchParams.get("date");
@@ -51,8 +52,8 @@ function HomeContent() {
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
-  // 날짜가 바뀌면 모달 닫기
-  useEffect(() => { setModal(null); }, [selectedDate]);
+  // 날짜가 바뀌면 모달·확인 상태 초기화
+  useEffect(() => { setModal(null); setConfirmIdx(null); }, [selectedDate]);
 
   const handleDateClick = (date: string) => {
     if (selectedDate === date) {
@@ -83,6 +84,7 @@ function HomeContent() {
   const handleDelete = async (date: string, idx: number) => {
     const record = records[date];
     if (!record) return;
+    setConfirmIdx(null);
     setDeletingIdx(idx);
     try {
       await applyEntries(date, record.entries.filter((_, i) => i !== idx));
@@ -205,25 +207,66 @@ function HomeContent() {
                     }}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <p style={{ fontSize: 11, color: "var(--muted)" }}>
+                      <p style={{ fontSize: 11, color: "var(--muted)", margin: 0, lineHeight: 1 }}>
                         {i + 1}번째 기록 · {formatTime(entry.createdAt)}
                       </p>
-                      <div className="flex gap-3">
+                      <div className="flex items-center gap-3">
                         <button
                           onClick={() => setModal({ type: "edit", idx: i, initialContent: entry.content })}
-                          style={{ fontSize: 11, color: "var(--muted)", cursor: "pointer" }}
+                          style={{ fontSize: 11, color: "var(--muted)", cursor: "pointer", lineHeight: 1 }}
                           className="hover:text-white transition-colors"
                         >
                           수정
                         </button>
-                        <button
-                          onClick={() => handleDelete(selectedDate, i)}
-                          disabled={deletingIdx === i}
-                          style={{ fontSize: 11, color: "#c0392b", cursor: deletingIdx === i ? "not-allowed" : "pointer", opacity: deletingIdx === i ? 0.45 : 1 }}
-                          className="transition-colors"
-                        >
-                          {deletingIdx === i ? "삭제 중..." : "삭제"}
-                        </button>
+                        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                          <button
+                            onClick={() => setConfirmIdx(confirmIdx === i ? null : i)}
+                            disabled={deletingIdx === i}
+                            style={{ fontSize: 11, color: "#c0392b", cursor: deletingIdx === i ? "not-allowed" : "pointer", opacity: deletingIdx === i ? 0.45 : 1, lineHeight: 1 }}
+                          >
+                            {deletingIdx === i ? "삭제 중..." : "삭제"}
+                          </button>
+                          {confirmIdx === i && (
+                            <div
+                              className="confirm-popup"
+                              style={{
+                                position: "absolute",
+                                top: "50%",
+                                left: "calc(100% + 8px)",
+                                transform: "translateY(-50%)",
+                                backgroundColor: "var(--background)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 8,
+                                padding: "10px 12px",
+                                boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+                                whiteSpace: "nowrap",
+                                zIndex: 50,
+                              }}
+                            >
+                              <p style={{ fontSize: 12, color: "var(--foreground)", marginBottom: 8 }}>정말 삭제할까요?</p>
+                              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                                <button
+                                  onClick={() => setConfirmIdx(null)}
+                                  style={{
+                                    fontSize: 11, padding: "3px 10px", borderRadius: 5, cursor: "pointer",
+                                    backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)",
+                                  }}
+                                >
+                                  취소
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(selectedDate, i)}
+                                  style={{
+                                    fontSize: 11, padding: "3px 10px", borderRadius: 5, cursor: "pointer",
+                                    backgroundColor: "#c0392b", border: "none", color: "#fff",
+                                  }}
+                                >
+                                  삭제
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <p className="whitespace-pre-wrap leading-relaxed" style={{ fontSize: 14, color: "var(--foreground)" }}>

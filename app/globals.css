@@ -65,6 +65,10 @@ button:not(:disabled):hover {
   animation: slideUpOut 0.25s ease forwards;
 }
 
+.confirm-popup {
+  animation: fadeIn 0.15s ease forwards;
+}
+
 .modal-overlay {
   animation: fadeIn 0.2s ease forwards;
 }
